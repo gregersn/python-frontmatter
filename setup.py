@@ -43,4 +43,7 @@ setup(
         "Programming Language :: Python :: 3.9",
     ],
     test_suite="test",
+    package_data={
+        'frontmatter': ['py.typed']
+    }
 )

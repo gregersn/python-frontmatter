@@ -4,7 +4,7 @@ Utilities for handling unicode and other repetitive bits
 """
 
 
-def u(text, encoding="utf-8"):
+def u(text: str, encoding: str = "utf-8"):
     "Return unicode text, no matter what"
 
     if isinstance(text, bytes):

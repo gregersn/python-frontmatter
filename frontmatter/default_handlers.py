@@ -8,8 +8,8 @@ By default, ``frontmatter`` reads and writes YAML metadata. But maybe
 you don't like YAML. Maybe enjoy writing metadata in JSON, or TOML, or
 some other exotic markup not yet invented. For this, there are handlers.
 
-This module includes handlers for YAML, JSON and TOML, as well as a 
-:py:class:`BaseHandler <frontmatter.default_handlers.BaseHandler>` that 
+This module includes handlers for YAML, JSON and TOML, as well as a
+:py:class:`BaseHandler <frontmatter.default_handlers.BaseHandler>` that
 outlines the basic API and can be subclassed to deal with new formats.
 
 Handlers
@@ -29,10 +29,10 @@ A handler needs to do four things:
 
 An example:
 
-Calling :py:func:`frontmatter.load <frontmatter.load>` (or :py:func:`loads <frontmatter.loads>`) 
-with the ``handler`` argument tells frontmatter which handler to use. 
-The handler instance gets saved as an attribute on the returned post 
-object. By default, calling :py:func:`frontmatter.dumps <frontmatter.dumps>` 
+Calling :py:func:`frontmatter.load <frontmatter.load>` (or :py:func:`loads <frontmatter.loads>`)
+with the ``handler`` argument tells frontmatter which handler to use.
+The handler instance gets saved as an attribute on the returned post
+object. By default, calling :py:func:`frontmatter.dumps <frontmatter.dumps>`
 on the post will use the attached handler.
 
 
@@ -64,12 +64,13 @@ on the post will use the attached handler.
     <BLANKLINE>
     And this shouldn't break.
 
-Passing a new handler to :py:func:`frontmatter.dumps <frontmatter.dumps>` 
+Passing a new handler to :py:func:`frontmatter.dumps <frontmatter.dumps>`
 (or :py:func:`dump <frontmatter.dump>`) changes the export format:
 
 ::
 
-    >>> print(frontmatter.dumps(post, handler=YAMLHandler())) # doctest: +NORMALIZE_WHITESPACE
+    # doctest: +NORMALIZE_WHITESPACE
+    >>> print(frontmatter.dumps(post, handler=YAMLHandler()))
     ---
     author: bob
     something: else
@@ -116,6 +117,7 @@ All handlers use the interface defined on ``BaseHandler``. Each handler needs to
 
 import json
 import re
+from typing import TYPE_CHECKING, Any, Mapping, MutableMapping, NoReturn, Optional, Pattern
 import yaml
 
 try:
@@ -131,6 +133,9 @@ except ImportError:
     toml = None
 
 from .util import u
+
+if TYPE_CHECKING:
+    from . import Post
 
 
 __all__ = ["BaseHandler", "YAMLHandler", "JSONHandler"]
@@ -156,11 +161,13 @@ class BaseHandler:
     All default handlers are subclassed from BaseHandler.
     """
 
-    FM_BOUNDARY = None
-    START_DELIMITER = None
-    END_DELIMITER = None
+    FM_BOUNDARY: Optional[Pattern[str]] = None
+    START_DELIMITER: Optional[str] = None
+    END_DELIMITER: Optional[str] = None
 
-    def __init__(self, fm_boundary=None, start_delimiter=None, end_delimiter=None):
+    def __init__(self, fm_boundary: Optional[Pattern[str]] = None,
+                 start_delimiter: Optional[str] = None,
+                 end_delimiter: Optional[str] = None):
         self.FM_BOUNDARY = fm_boundary or self.FM_BOUNDARY
         self.START_DELIMITER = start_delimiter or self.START_DELIMITER
         self.END_DELIMITER = end_delimiter or self.END_DELIMITER
@@ -173,7 +180,7 @@ class BaseHandler:
                 )
             )
 
-    def detect(self, text):
+    def detect(self, text: str):
         """
         Decide whether this handler can parse the given ``text``,
         and return True or False.
@@ -181,30 +188,31 @@ class BaseHandler:
         Note that this is *not* called when passing a handler instance to
         :py:func:`frontmatter.load <frontmatter.load>` or :py:func:`loads <frontmatter.loads>`.
         """
-        if self.FM_BOUNDARY.match(text):
+        if self.FM_BOUNDARY is not None and self.FM_BOUNDARY.match(text):
             return True
         return False
 
-    def split(self, text):
+    def split(self, text: str):
         """
         Split text into frontmatter and content
         """
+        assert self.FM_BOUNDARY is not None
         _, fm, content = self.FM_BOUNDARY.split(text, 2)
         return fm, content
 
-    def load(self, fm):
+    def load(self, fm: str) -> MutableMapping[str, Any]:
         """
         Parse frontmatter and return a dict
         """
         raise NotImplementedError
 
-    def export(self, metadata, **kwargs):
+    def export(self, metadata: Any, **kwargs: Any) -> str:
         """
         Turn metadata back into text
         """
         raise NotImplementedError
 
-    def format(self, post, **kwargs):
+    def format(self, post: 'Post', **kwargs: Any):
         """
         Turn a post into a string, used in ``frontmatter.dumps``
         """
@@ -230,14 +238,14 @@ class YAMLHandler(BaseHandler):
     FM_BOUNDARY = re.compile(r"^-{3,}\s*$", re.MULTILINE)
     START_DELIMITER = END_DELIMITER = "---"
 
-    def load(self, fm, **kwargs):
+    def load(self, fm: str, **kwargs: Any) -> MutableMapping[str, Any]:
         """
         Parse YAML front matter. This uses yaml.SafeLoader by default.
         """
         kwargs.setdefault("Loader", SafeLoader)
         return yaml.load(fm, **kwargs)
 
-    def export(self, metadata, **kwargs):
+    def export(self, metadata: Mapping[str, Any], **kwargs: Any]):
         """
         Export metadata as YAML. This uses yaml.SafeDumper by default.
         """
@@ -245,8 +253,8 @@ class YAMLHandler(BaseHandler):
         kwargs.setdefault("default_flow_style", False)
         kwargs.setdefault("allow_unicode", True)
 
-        metadata = yaml.dump(metadata, **kwargs).strip()
-        return u(metadata)  # ensure unicode
+        _metadata: str = yaml.dump(metadata, **kwargs).strip()
+        return u(_metadata)  # ensure unicode
 
 
 class JSONHandler(BaseHandler):
@@ -256,21 +264,24 @@ class JSONHandler(BaseHandler):
     Note that changing ``START_DELIMITER`` or ``END_DELIMITER`` may break JSON parsing.
     """
 
-    FM_BOUNDARY = re.compile(r"^(?:{|})$", re.MULTILINE)
-    START_DELIMITER = ""
-    END_DELIMITER = ""
+    FM_BOUNDARY= re.compile(r"^(?:{|})$", re.MULTILINE)
+    START_DELIMITER= ""
+    END_DELIMITER= ""
 
-    def split(self, text):
-        _, fm, content = self.FM_BOUNDARY.split(text, 2)
-        return "{" + fm + "}", content
+    def split(self, text: str):
+        if self.FM_BOUNDARY is not None:
+            _, fm, content= self.FM_BOUNDARY.split(text, 2)
+            return "{" + fm + "}", content
 
-    def load(self, fm, **kwargs):
+        raise Exception("FM_BOUNDARY not set.")
+
+    def load(self, fm: str, **kwargs: Any) -> MutableMapping[str, Any]:
         return json.loads(fm, **kwargs)
 
-    def export(self, metadata, **kwargs):
+    def export(self, metadata: Any, **kwargs: Any):
         "Turn metadata into JSON"
         kwargs.setdefault("indent", 4)
-        metadata = json.dumps(metadata, **kwargs)
+        metadata= json.dumps(metadata, **kwargs)
         return u(metadata)
 
 
@@ -283,17 +294,24 @@ if toml:
         By default, split based on ``+++``.
         """
 
-        FM_BOUNDARY = re.compile(r"^\+{3,}\s*$", re.MULTILINE)
-        START_DELIMITER = END_DELIMITER = "+++"
+        FM_BOUNDARY= re.compile(r"^\+{3,}\s*$", re.MULTILINE)
+        START_DELIMITER= END_DELIMITER = "+++"
 
-        def load(self, fm, **kwargs):
-            return toml.loads(fm, **kwargs)
+        def load(self, fm: str, **kwargs: Any):
+            if toml is not None:
+                return toml.loads(fm, **kwargs)
 
-        def export(self, metadata, **kwargs):
+            raise Exception("Toml is not available.")
+
+        def export(self, metadata: Any, **kwargs: Any):
             "Turn metadata into TOML"
-            metadata = toml.dumps(metadata)
-            return u(metadata)
+
+            if toml is not None:
+                metadata= toml.dumps(metadata)
+                return u(metadata)
+
+            raise Exception("Toml is not available.")
 
 
 else:
-    TOMLHandler = None
+    TOMLHandler= None
